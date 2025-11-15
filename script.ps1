@@ -1,301 +1,161 @@
 #Requires -Version 5.1
 #Requires -PSEdition Desktop
-#Requires -RunAsAdministrator
 
 <#
 .SYNOPSIS
-    Ultimate Windows 11 Post-Installation Script v3.0.0
-    Optimized for AMD Ryzen 5950X | Windows 11 64-bit | Clean Install
+    A comprehensive post-installation and optimization script for Windows.
 
 .DESCRIPTION
-    Comprehensive post-installation automation script featuring:
-    - Ultra-fast parallel Chrome download with resume support
-    - 50+ curated software packages (dev, productivity, gaming, utilities)
-    - Deep system optimizations (power, network, disk, memory)
-    - Security hardening (Windows Defender, Firewall, UAC)
-    - Registry tweaks for performance and privacy
-    - AppX bloatware removal
-    - Scheduled auto-updates
-    - Complete logging and error recovery
+    This script automates the post-installation process for Windows by providing a suite of powerful features, including:
+    - A user-friendly graphical interface for selecting and installing a curated list of popular and essential applications.
+    - Automated installation of Google Chrome.
+    - System optimizations for enhanced performance and privacy, including power plan adjustments and service management.
+    - Registry tweaks to improve the user experience and disable telemetry.
+    - Removal of bloatware and pre-installed applications to free up system resources.
+    - The ability to install local applications from .exe or .msi files.
+    - Detailed logging of all actions for easy troubleshooting.
 
 .AUTHOR
-    Cylae | Windows 11 Ultimate Optimization Suite
-    
-.VERSION
-    3.0.0 - Production Ready | 2025-11-15
+    Cylae
 
-.NOTES
-    Execute as Administrator on fresh Windows 11 installation
-    Optimized for AMD Ryzen 5950X processors
-    Supports parallel downloading and multi-threaded operations
+.VERSION
+    3.1.0
 #>
 
-# ===========================
-# CONFIGURATION & CONSTANTS
-# ===========================
+# =====================================================================================================================
+# Configuration and Constants
+# =====================================================================================================================
 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$VerbosePreference = "Continue"
 
 # Script metadata
-$SCRIPT_VERSION = "3.0.0"
+$SCRIPT_VERSION = "3.1.0"
 $SCRIPT_AUTHOR = "Cylae"
-$TARGET_OS = "Windows 11 64-bit"
-$TARGET_CPU = "AMD Ryzen 5950X"
+$TARGET_OS = "Windows 10 & 11"
 $START_TIME = Get-Date
 
 # Paths
-$TEMP_DIR = $env:TEMP
 $DESKTOP_DIR = "$env:USERPROFILE\Desktop"
+$TEMP_DIR = $env:TEMP
 $LOG_DIR = if (Test-Path $DESKTOP_DIR) { $DESKTOP_DIR } else { $TEMP_DIR }
-$LOG_FILE = Join-Path $LOG_DIR "install-log-$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+$LOG_FILE = Join-Path $LOG_DIR "log-$($START_TIME.ToString('yyyy-MM-dd_HH-mm-ss')).log"
 
-# Chrome download URLs (multiple mirrors for failover)
-$CHROME_URLS = @(
-    "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi",
-    "https://dl-ssl.google.com/chrome/install/googlechromestandaloneenterprise64.msi"
-)
-
-# ===========================
-# UTILITY FUNCTIONS
-# ===========================
+# =====================================================================================================================
+# Utility Functions
+# =====================================================================================================================
 
 function Initialize-Script {
     <#
     .SYNOPSIS
-        Perform pre-flight checks and initialization
+        Initializes the script and performs pre-flight checks.
     #>
     Clear-Host
-    Write-Host "`n" + ("=" * 90) -ForegroundColor Cyan
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "  ║     ULTIMATE WINDOWS 11 POST-INSTALLATION SCRIPT v$SCRIPT_VERSION              ║" -ForegroundColor Cyan
-    Write-Host "  ║     Author: $SCRIPT_AUTHOR | OS: $TARGET_OS | CPU: $TARGET_CPU   ║" -ForegroundColor Cyan
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ("=" * 90) + "`n" -ForegroundColor Cyan
+
+    Write-Host "`n" + ("=" * 80)
+    Write-Host "╔════════════════════════════════════════════════════════════════════════════╗"
+    Write-Host "║              WINDOWS POST-INSTALLATION SCRIPT v$SCRIPT_VERSION              ║"
+    Write-Host "║                  Author: $SCRIPT_AUTHOR | Target OS: $TARGET_OS                  ║"
+    Write-Host "╚════════════════════════════════════════════════════════════════════════════╝"
+    Write-Host ("=" * 80) + "`n"
+
+    # Start logging
+    try {
+        Start-Transcript -Path $LOG_FILE -Append -Force | Out-Null
+    }
+    catch {
+        Write-Status -Message "Failed to initialize logging." -Type Error
+    }
 
     # Verify Administrator privileges
-    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin) {
-        Write-Host "❌ ERROR: This script requires Administrator privileges" -ForegroundColor Red
-        Write-Host "   Please re-run PowerShell as Administrator and execute this script again." -ForegroundColor Yellow
-        Start-Sleep -Seconds 3
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Status -Message "This script requires Administrator privileges. Please re-run PowerShell as an Administrator." -Type Error
+        Start-Sleep -Seconds 5
         exit 1
     }
 
-    # Verify Windows 11
+    # Verify Windows version
     $osVersion = [System.Environment]::OSVersion.Version
-    if ($osVersion.Major -lt 10 -or ($osVersion.Major -eq 10 -and $osVersion.Build -lt 22000)) {
-        Write-Host "⚠️  WARNING: Windows version detected is below 11. Some features may not work." -ForegroundColor Yellow
-        Start-Sleep -Seconds 2
+    if ($osVersion.Major -ne 10 -or $osVersion.Build -lt 19041) {
+        Write-Status -Message "This script is designed for Windows 10 (version 2004+) and Windows 11. Running on an unsupported OS version may lead to unexpected results." -Type Warning
     }
 
-    # Verify WinGet availability
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ FATAL ERROR: WinGet not found on this system" -ForegroundColor Red
-        Write-Host "   Install 'App Installer' from the Microsoft Store to proceed." -ForegroundColor Yellow
+    # Verify STA mode for GUI
+    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
+        Write-Status -Message "This script requires Single-Threaded Apartment (STA) mode to display the GUI. Restarting in STA mode..." -Type Warning
         Start-Sleep -Seconds 3
-        exit 1
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File $PSCommandPath
+        exit
     }
-
-    # Initialize logging
-    try {
-        Start-Transcript -Path $LOG_FILE -Append -ErrorAction Stop | Out-Null
-        Write-Host "📝 Logging initialized: $LOG_FILE`n" -ForegroundColor Green
-    } catch {
-        Write-Host "⚠️  Warning: Could not initialize transcript logging" -ForegroundColor Yellow
-    }
-
-    Write-Host "✓ Pre-flight checks completed successfully`n" -ForegroundColor Green
 }
 
 function Write-Status {
     <#
     .SYNOPSIS
-        Write formatted status messages with consistent styling
+        Writes a formatted status message to the console.
     #>
     param(
-        [Parameter(Mandatory=$true)][string]$Message,
-        [Parameter(Mandatory=$false)][ValidateSet("Success", "Error", "Warning", "Info", "Step", "Progress")][string]$Type = "Info"
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("Success", "Error", "Warning", "Info", "Step")]
+        [string]$Type = "Info"
     )
 
     $colors = @{
         "Success" = "Green"
-        "Error" = "Red"
+        "Error"   = "Red"
         "Warning" = "Yellow"
-        "Info" = "Cyan"
-        "Step" = "Magenta"
-        "Progress" = "Blue"
+        "Info"    = "Cyan"
+        "Step"    = "Magenta"
     }
 
     $symbols = @{
         "Success" = "✓"
-        "Error" = "✗"
+        "Error"   = "✗"
         "Warning" = "⚠"
-        "Info" = "ℹ"
-        "Step" = "▶"
-        "Progress" = "⟳"
+        "Info"    = "ℹ"
+        "Step"    = "▶"
     }
 
-    $color = $colors[$Type]
-    $symbol = $symbols[$Type]
-    Write-Host "$symbol $Message" -ForegroundColor $color
-}
-
-function Test-IsAdministrator {
-    <#
-    .SYNOPSIS
-        Verify if running with Administrator privileges
-    #>
-    try {
-        $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-        $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    } catch {
-        return $false
-    }
+    Write-Host "$($symbols[$Type]) $Message" -ForegroundColor $colors[$Type]
 }
 
 function Ensure-ModuleIsInstalled {
     <#
     .SYNOPSIS
-        Ensure PowerShell module is installed and imported with robust error handling
-    #>
-    param([string]$ModuleName = "Microsoft.WinGet.Client")
-
-    if (Get-Module -Name $ModuleName -ListAvailable) {
-        try {
-            Import-Module -Name $ModuleName -ErrorAction Stop | Out-Null
-            Write-Status "Module '$ModuleName' available and imported" -Type Success
-            return $true
-        } catch {
-            Write-Status "Module present but import failed: $_" -Type Warning
-        }
-    }
-
-    Write-Status "Installing PowerShell module: $ModuleName" -Type Step
-
-    try {
-        # Ensure NuGet provider
-        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-            Write-Host "  → Installing NuGet provider..." -ForegroundColor Gray
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
-        }
-
-        # Update PowerShellGet
-        Write-Host "  → Updating PowerShellGet..." -ForegroundColor Gray
-        Install-Module -Name PowerShellGet -Force -Scope CurrentUser -AllowClobber | Out-Null
-
-        # Trust PSGallery
-        $psGallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-        if ($psGallery -and $psGallery.InstallationPolicy -ne 'Trusted') {
-            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-        }
-
-        # Install target module
-        Write-Host "  → Installing $ModuleName..." -ForegroundColor Gray
-        Install-Module -Name $ModuleName -Force -Scope CurrentUser -AllowClobber | Out-Null
-        Import-Module -Name $ModuleName -ErrorAction Stop | Out-Null
-
-        Write-Status "Module installed successfully" -Type Success
-        return $true
-    } catch {
-        Write-Status "Failed to install module: $_" -Type Error
-        return $false
-    }
-}
-
-function Invoke-ParallelDownload {
-    <#
-    .SYNOPSIS
-        Download files with parallel support, progress tracking, and failover
+        Ensures that a PowerShell module is installed and imported.
     #>
     param(
-        [string[]]$Urls,
-        [string]$OutputPath,
-        [int]$MaxRetries = 3,
-        [int]$TimeoutSeconds = 600
+        [string]$ModuleName = "Microsoft.WinGet.Client"
     )
 
-    $attempt = 0
-    foreach ($url in $Urls) {
-        $attempt++
-        Write-Status "Attempting download (Mirror $attempt/$($Urls.Count)): $(Split-Path $url -Leaf)" -Type Progress
-
-        try {
-            $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-            
-            # Use modern Invoke-WebRequest with progress
-            $ProgressPreference = "Continue"
-            Invoke-WebRequest -Uri $url `
-                -OutFile $OutputPath `
-                -UseBasicParsing `
-                -TimeoutSec $TimeoutSeconds `
-                -ErrorAction Stop | Out-Null
-            $ProgressPreference = "SilentlyContinue"
-            
-            $stopwatch.Stop()
-
-            if (Test-Path $OutputPath) {
-                $fileSize = (Get-Item $OutputPath).Length / 1MB
-                $speed = [math]::Round($fileSize / ($stopwatch.Elapsed.TotalSeconds), 2)
-                Write-Status "Download successful ($fileSize MB at $speed MB/s)" -Type Success
-                return $true
-            }
-        } catch {
-            Write-Status "Download failed: $_" -Type Warning
-            if (Test-Path $OutputPath) { 
-                Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue 
-            }
-            if ($attempt -lt $Urls.Count) {
-                Write-Host "  → Retrying with next mirror..." -ForegroundColor Gray
-            }
-            continue
-        }
+    if (Get-Module -Name $ModuleName -ListAvailable) {
+        Write-Status "Module '$ModuleName' is already installed." -Type Success
+        return
     }
 
-    Write-Status "All download attempts failed" -Type Error
-    return $false
-}
-
-function Install-Chrome {
-    <#
-    .SYNOPSIS
-        Download and install Google Chrome 64-bit with optimized parallel download
-    #>
-    Write-Status "Installing Google Chrome 64-bit (Enterprise Edition)" -Type Step
-    
-    $chromeInstaller = Join-Path $TEMP_DIR "chrome-installer.msi"
+    Write-Status "Installing PowerShell module: $ModuleName..." -Type Step
 
     try {
-        # Parallel download with multiple mirrors and failover
-        $downloadSuccess = Invoke-ParallelDownload -Urls $CHROME_URLS -OutputPath $chromeInstaller
+        Write-Host "  → Ensuring PowerShellGet is up-to-date..."
+        Install-Module -Name PowerShellGet -Force -Scope AllUsers -AllowClobber -ErrorAction Stop | Out-Null
 
-        if (-not $downloadSuccess) {
-            Write-Status "Chrome download failed - skipping installation" -Type Error
-            return $false
-        }
+        Write-Host "  → Ensuring NuGet provider is installed..."
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null
 
-        # Install silently
-        Write-Host "  → Running MSI installer..." -ForegroundColor Gray
-        $process = Start-Process -FilePath "msiexec.exe" `
-            -ArgumentList "/i `"$chromeInstaller`" /qn /norestart ALLUSERS=1" `
-            -Wait -PassThru -ErrorAction Stop
+        Write-Host "  → Trusting the PSGallery repository..."
+        Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
 
-        if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-            Write-Status "Chrome installation completed successfully" -Type Success
-            return $true
-        } else {
-            Write-Status "Chrome installation failed (Exit code: $($process.ExitCode))" -Type Error
-            return $false
-        }
-    } catch {
-        Write-Status "Exception during Chrome installation: $_" -Type Error
-        return $false
-    } finally {
-        if (Test-Path $chromeInstaller) {
-            Remove-Item $chromeInstaller -Force -ErrorAction SilentlyContinue
-        }
+        Write-Host "  → Installing module '$ModuleName'..."
+        Install-Module -Name $ModuleName -Force -Scope AllUsers -AllowClobber -ErrorAction Stop | Out-Null
+
+        Write-Status "Module '$ModuleName' installed and imported successfully." -Type Success
+    }
+    catch {
+        Write-Status "An error occurred during the installation of module '$ModuleName'." -Type Error
+        Write-Status "Please try to install it manually by running 'Install-Module -Name $ModuleName -Force' in an Administrator PowerShell window and then re-run the script." -Type Info
+        exit 1
     }
 }
 
@@ -306,6 +166,7 @@ function Get-CuratedPackageList {
     #>
     return @{
         "Essential System" = @(
+            "Google.Chrome",
             "Microsoft.WindowsTerminal",
             "Git.Git",
             "Microsoft.PowerToys",
@@ -391,209 +252,224 @@ function Get-CuratedPackageList {
 function Select-Applications {
     <#
     .SYNOPSIS
-        Interactive UI with tabbed interface for package selection
+        Displays a graphical user interface for selecting applications to install.
     #>
-    Write-Status "Launching application selection interface" -Type Step
-
-    if ([System.Environment]::UserInteractive -eq $false) {
-        Write-Status "Non-interactive environment detected - skipping UI" -Type Warning
-        return @()
-    }
+    Write-Status -Message "Launching application selection interface..." -Type Step
 
     try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
-    } catch {
-        Write-Status "Windows.Forms unavailable - skipping package selection UI" -Type Warning
-        return @()
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
     }
-
-    # Verify STA thread requirement
-    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
-        Write-Status "STA thread required for UI - restarting..." -Type Warning
-        exit 0
+    catch {
+        Write-Status -Message "Failed to load Windows Forms assemblies. Please ensure that .NET Framework is installed." -Type Error
+        return @()
     }
 
     $packages = Get-CuratedPackageList
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Windows 11 Ultimate Software Selection"
-    $form.Size = New-Object System.Drawing.Size(700, 800)
+    $form.Text = "Application Selection"
+    $form.Size = New-Object System.Drawing.Size(800, 600)
     $form.StartPosition = "CenterScreen"
-    $form.TopMost = $true
-    $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-
-    # Tabs for categories
-    $tabControl = New-Object System.Windows.Forms.TabControl
-    $tabControl.Location = New-Object System.Drawing.Point(10, 60)
-    $tabControl.Size = New-Object System.Drawing.Size(660, 650)
-    $form.Controls.Add($tabControl)
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
 
     $allCheckboxes = @()
 
-    foreach ($category in $packages.Keys) {
-        $tabPage = New-Object System.Windows.Forms.TabPage
-        $tabPage.Text = $category
-        
-        $panel = New-Object System.Windows.Forms.Panel
-        $panel.AutoScroll = $true
-        $panel.Dock = "Fill"
-        
-        $y = 10
+    $mainPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $mainPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+    $mainPanel.AutoScroll = $true
+    $mainPanel.Padding = New-Object System.Windows.Forms.Padding(10)
+
+    $searchBox.Dock = [System.Windows.Forms.DockStyle]::Top
+    $mainPanel.Controls.Add($searchBox)
+
+    foreach ($category in $packages.Keys.GetEnumerator() | Sort-Object) {
+        $categoryLabel = New-Object System.Windows.Forms.Label
+        $categoryLabel.Text = $category
+        $categoryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $categoryLabel.AutoSize = $true
+        $categoryLabel.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 5)
+        $mainPanel.SetFlowBreak($categoryLabel, $true)
+        $mainPanel.Controls.Add($categoryLabel)
+
         foreach ($package in $packages[$category]) {
             $checkbox = New-Object System.Windows.Forms.CheckBox
             $checkbox.Text = $package
-            $checkbox.Location = New-Object System.Drawing.Point(10, $y)
-            $checkbox.Size = New-Object System.Drawing.Size(600, 24)
             $checkbox.Checked = $true
-            $checkbox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-            $panel.Controls.Add($checkbox)
-            $allCheckboxes += @{ Control = $checkbox; Package = $package }
-            $y += 28
+            $checkbox.Width = 350
+            $checkbox.Margin = New-Object System.Windows.Forms.Padding(20, 0, 0, 0)
+            $mainPanel.Controls.Add($checkbox)
+            $allCheckboxes += $checkbox
         }
-        
-        $tabPage.Controls.Add($panel)
-        $tabControl.TabPages.Add($tabPage)
     }
+    # Top panel for controls
+    $topPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $topPanel.Dock = [System.Windows.Forms.DockStyle]::Top
+    $topPanel.Padding = New-Object System.Windows.Forms.Padding(10, 10, 10, 0)
+    $topPanel.Height = 40
 
-    # Title Label
-    $titleLabel = New-Object System.Windows.Forms.Label
-    $titleLabel.Text = "Select software to install (all selected by default):"
-    $titleLabel.Location = New-Object System.Drawing.Point(10, 10)
-    $titleLabel.Size = New-Object System.Drawing.Size(660, 30)
-    $titleLabel.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-    $form.Controls.Add($titleLabel)
+    $searchLabel = New-Object System.Windows.Forms.Label
+    $searchLabel.Text = "Search:"
+    $searchLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left
 
-    # Buttons
+    $searchBox = New-Object System.Windows.Forms.TextBox
+    $searchBox.Size = New-Object System.Drawing.Size(200, 20)
+    $searchBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left
+    $searchBox.add_TextChanged({
+        $searchText = $searchBox.Text.ToLower()
+        $mainPanel.SuspendLayout() # Pause layout updates for performance
+        foreach ($checkbox in $allCheckboxes) {
+            $checkbox.Visible = $checkbox.Text.ToLower().Contains($searchText)
+        }
+        $mainPanel.ResumeLayout() # Resume layout updates
+    })
+
+    $selectAllButton = New-Object System.Windows.Forms.Button
+    $selectAllButton.Text = "Select All"
+    $selectAllButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left
+    $selectAllButton.add_Click({ foreach ($checkbox in $allCheckboxes) { $checkbox.Checked = $true } })
+
+    $deselectAllButton = New-Object System.Windows.Forms.Button
+    $deselectAllButton.Text = "Deselect All"
+    $deselectAllButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left
+    $deselectAllButton.add_Click({ foreach ($checkbox in $allCheckboxes) { $checkbox.Checked = $false } })
+
+    $topPanel.Controls.AddRange(@($searchLabel, $searchBox, $selectAllButton, $deselectAllButton))
+
+    # Bottom panel for buttons
+    $bottomPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $bottomPanel.Dock = [System.Windows.Forms.DockStyle]::Bottom
+    $bottomPanel.FlowDirection = [System.Windows.Forms.FlowDirection]::RightToLeft
+    $bottomPanel.Padding = New-Object System.Windows.Forms.Padding(10)
+    $bottomPanel.Height = 50
+
     $okButton = New-Object System.Windows.Forms.Button
-    $okButton.Text = "▶ Install Selected"
-    $okButton.Location = New-Object System.Drawing.Point(250, 730)
-    $okButton.Size = New-Object System.Drawing.Size(150, 35)
-    $okButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $okButton.BackColor = [System.Drawing.Color]::Green
-    $okButton.ForeColor = [System.Drawing.Color]::White
+    $okButton.Text = "Install"
     $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.AcceptButton = $okButton
-    $form.Controls.Add($okButton)
 
     $cancelButton = New-Object System.Windows.Forms.Button
-    $cancelButton.Text = "Skip Installation"
-    $cancelButton.Location = New-Object System.Drawing.Point(420, 730)
-    $cancelButton.Size = New-Object System.Drawing.Size(150, 35)
-    $cancelButton.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $cancelButton.Text = "Cancel"
     $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $form.CancelButton = $cancelButton
-    $form.Controls.Add($cancelButton)
+
+    $bottomPanel.Controls.AddRange(@($cancelButton, $okButton))
+
+    # Add all panels to the form
+    $form.Controls.AddRange(@($mainPanel, $topPanel, $bottomPanel))
 
     $result = $form.ShowDialog()
 
-    $selected = @()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        foreach ($item in $allCheckboxes) {
-            if ($item.Control.Checked) {
-                $selected += $item.Package
-            }
-        }
+        return $allCheckboxes | Where-Object { $_.Checked -and $_.Visible } | ForEach-Object { $_.Text }
     }
-
-    $form.Dispose()
-    return $selected
+    else {
+        return @()
+    }
 }
 
 function Install-WingetPackage {
     <#
     .SYNOPSIS
-        Install a package using WinGet with comprehensive error handling
+        Installs a package using the WinGet PowerShell module.
     #>
     param(
-        [Parameter(Mandatory=$true)][string]$PackageId,
-        [Parameter(Mandatory=$false)][string]$CustomName = $PackageId
+        [string]$PackageId
     )
 
-    Write-Host "  ▶ $CustomName..." -ForegroundColor Gray -NoNewline
-
+    Write-Status "Installing '$PackageId'..." -Type Info
     try {
-        & winget install --id $PackageId --accept-source-agreements --accept-package-agreements -h 2>&1 | Out-Null
-        $exitCode = $LASTEXITCODE
-
-        switch ($exitCode) {
-            0 { 
-                Write-Host " ✓" -ForegroundColor Green
-                return $true
-            }
-            -1978335189 { 
-                Write-Host " (already installed)" -ForegroundColor Yellow
-                return $true
-            }
-            default { 
-                Write-Host " ✗ (code: $exitCode)" -ForegroundColor Red
-                return $false
-            }
+        $package = Find-WinGetPackage -Id $PackageId -ErrorAction Stop
+        if ($package) {
+            Install-WinGetPackage -Id $PackageId -AcceptPackageAgreements -AcceptSourceAgreements -ErrorAction Stop | Out-Null
+            Write-Status "'$PackageId' installed successfully." -Type Success
         }
-    } catch {
-        Write-Host " ✗" -ForegroundColor Red
-        return $false
+        else {
+            Write-Status "Package '$PackageId' not found." -Type Warning
+        }
+    }
+    catch {
+        if ($_.Exception.Message -like "*0x80070057*") { # Package already installed
+            Write-Status "'$PackageId' is already installed." -Type Info
+        } else {
+            Write-Status "Failed to install '$PackageId'." -Type Error
+            Write-Status "  Reason: $($_.Exception.Message)" -Type Info
+        }
     }
 }
 
-function Optimize-SystemPerformance {
+function Optimize-System {
     <#
     .SYNOPSIS
-        Apply deep system optimizations for gaming and productivity
+        Applies system optimizations for performance and privacy.
     #>
-    Write-Status "Applying system performance optimizations" -Type Step
+    Write-Status -Message "Applying system optimizations..." -Type Step
 
-    # Power configuration
-    Write-Host "  → Configuring power management..." -ForegroundColor Gray
-    try {
-        # Create and activate Ultimate Performance plan
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>&1 | Out-Null
-        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61 2>&1 | Out-Null
-        
-        # AMD Ryzen 5950X specific optimizations
-        powercfg -setacvalueindex scheme_current sub_processor PERFBOOSTMODE 2
-        powercfg -setacvalueindex scheme_current sub_processor PERFAUTONOMOUSMODE 1
-        powercfg -setacvalueindex scheme_current sub_processor PERFADJUSTPARAMS 100
-        
-        # Disable sleep/hibernate
-        powercfg -change monitor-timeout-ac 0
-        powercfg -change disk-timeout-ac 0
-        powercfg -change standby-timeout-ac 0
-        
-        Write-Status "Power configuration optimized" -Type Success
-    } catch {
-        Write-Status "Power configuration - some settings skipped" -Type Warning
+    # Set power plan
+    $powerPlanGuid = $null
+    $powerPlanName = $null
+
+    $ultimateGuid = (powercfg -list | Where-Object { $_ -match "Ultimate Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+    $highPerfGuid = (powercfg -list | Where-Object { $_ -match "High Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+    $balancedGuid = (powercfg -list | Where-Object { $_ -match "Balanced" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+
+    if ($ultimateGuid) {
+        $powerPlanGuid = $ultimateGuid
+        $powerPlanName = "Ultimate Performance"
     }
+    elseif ($highPerfGuid) {
+        $powerPlanGuid = $highPerfGuid
+        $powerPlanName = "High Performance"
+    }
+    elseif ($balancedGuid) {
+        $powerPlanGuid = $balancedGuid
+        $powerPlanName = "Balanced"
+    }
+
+    if ($powerPlanGuid) {
+        try {
+            powercfg -setactive $powerPlanGuid
+            Write-Status "Power plan set to '$powerPlanName'." -Type Success
+        }
+        catch {
+            Write-Status "Failed to set the power plan to '$powerPlanName'." -Type Warning
+        }
+    }
+    else {
+        Write-Status "Could not find a suitable power plan to apply." -Type Warning
+    }
+
+    # Disable sleep/hibernate
+    powercfg -change monitor-timeout-ac 0
+    powercfg -change disk-timeout-ac 0
+    powercfg -change standby-timeout-ac 0
+    Write-Status -Message "Disabled sleep and hibernate timeouts." -Type Success
 
     # Network optimization
-    Write-Host "  → Optimizing network stack..." -ForegroundColor Gray
-    try {
-        netsh int tcp set global autotuninglevel=normal
-        netsh int tcp set global ecn=enabled
-        netsh int tcp set global timestamps=disabled
-        netsh int tcp set supplemental internet congestionprovider=ctcp
-        
-        Write-Status "Network optimizations applied" -Type Success
-    } catch {
-        Write-Status "Network optimization - skipped" -Type Warning
+    netsh int tcp set global autotuninglevel=normal
+    netsh int tcp set global ecn=enabled
+    netsh int tcp set global timestamps=disabled
+    netsh int tcp set supplemental internet congestionprovider=ctcp
+    Write-Status -Message "Network optimizations applied." -Type Success
+
+    # Disable unnecessary services
+    $servicesToDisable = @(
+        "SysMain", # Superfetch
+        "diagtrack" # Connected User Experiences and Telemetry
+    )
+
+    foreach ($service in $servicesToDisable) {
+        try {
+            Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
+            Write-Status -Message "Disabled service '$service'." -Type Success
+        }
+        catch {
+            Write-Status -Message "Failed to disable service '$service'." -Type Warning
+        }
     }
 
-    # Storage optimization
-    Write-Host "  → Scheduling storage maintenance..." -ForegroundColor Gray
-    try {
-        schtasks /create /tn "Windows\Optimize-Volume" /tr "defrag.exe C: /U /V" /sc weekly /d MON /st 02:00 /F 2>&1 | Out-Null
-        Write-Status "Storage optimization scheduled weekly" -Type Success
-    } catch {
-        Write-Status "Storage optimization - skipped" -Type Warning
-    }
-}
-
-function Optimize-RegistryPerformance {
-    <#
-    .SYNOPSIS
-        Apply registry tweaks for performance and privacy
-    #>
-    Write-Status "Applying registry optimizations" -Type Step
-
+    # Registry optimizations
     function Set-RegistryValue {
         param(
             [string]$Path,
@@ -603,80 +479,30 @@ function Optimize-RegistryPerformance {
         )
         try {
             if (-not (Test-Path $Path)) {
-                New-Item -Path $Path -Force | Out-Null
+                New-Item -Path $Path -Force -ErrorAction Stop | Out-Null
             }
-            New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force | Out-Null
-        } catch {
-            # Silent fail
+            Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force -ErrorAction Stop | Out-Null
+            Write-Status -Message "Set registry value '$Name' at '$Path'." -Type Success
+        }
+        catch {
+            Write-Status -Message "Failed to set registry value '$Name' at '$Path'." -Type Warning
         }
     }
 
-    # Gaming and responsiveness
-    Write-Host "  → Gaming & responsiveness tweaks..." -ForegroundColor Gray
-    Set-RegistryValue "HKCU:\Control Panel\Desktop" "MenuShowDelay" "0" "String"
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "Taskmgr_Mru_Size" "60" "String"
-    Set-RegistryValue "HKCU:\Control Panel\Desktop" "FontSmoothing" "2" "String"
-    Set-RegistryValue "HKCU:\Control Panel\Desktop" "DragFullWindows" "1" "String"
+    # UI and Responsiveness
+    Set-RegistryValue -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" -Type "String"
+    Set-RegistryValue -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value "1" -Type "String"
 
-    # Privacy and telemetry
-    Write-Host "  → Disabling telemetry & advertising..." -ForegroundColor Gray
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "ShowSyncProviderNotifications" 0
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" "SilentInstalledAppsEnabled" 0
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" "SubscribedContent-310093Enabled" 0
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" "SubscribedContent-338389Enabled" 0
-    Set-RegistryValue "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "HideFileExt" 0
-    Set-RegistryValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0
-    Set-RegistryValue "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" "DisableWindowsConsumerFeatures" 1
+    # Privacy and Telemetry
+    Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -Value 0
+    Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AllowCortana" -Value 0
+    Set-RegistryValue -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
+    Set-RegistryValue -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowSyncProviderNotifications" -Value 0
+    Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Value 1
 
-    # Dark mode
-    Write-Host "  → Applying dark theme..." -ForegroundColor Gray
+    # Dark Mode
     Set-RegistryValue "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" "AppsUseLightTheme" 0
     Set-RegistryValue "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" "SystemUsesLightTheme" 0
-
-    Write-Status "Registry optimizations applied" -Type Success
-}
-
-function Remove-Bloatware {
-    <#
-    .SYNOPSIS
-        Remove Windows bloatware and unused applications
-    #>
-    Write-Status "Removing bloatware and unused applications" -Type Step
-
-    $bloatwarePatterns = @(
-        "*XboxApp*", "*Xbox.TCUI*", "*XboxGameOverlay*", "*XboxGamingOverlay*",
-        "*XboxSpeechToTextOverlay*", "*ZuneVideo*", "*ZuneMusic*", "*WindowsMaps*",
-        "*People*", "*YourPhone*", "*MixedReality.Portal*", "*MicrosoftSolitaireCollection*",
-        "*MinecraftUWP*", "*Microsoft3DViewer*", "*PaintStudio*", "*SkypeApp*",
-        "*GetHelp*", "*Todos*", "*Clipchamp*", "*WeatherApp*", "*CameraApp*"
-    )
-
-    $removed = 0
-    foreach ($pattern in $bloatwarePatterns) {
-        try {
-            $apps = Get-AppxPackage -AllUsers -Name $pattern -ErrorAction SilentlyContinue
-            foreach ($app in $apps) {
-                try {
-                    Remove-AppxPackage -Package $app.PackageFullName -ErrorAction SilentlyContinue
-                    $removed++
-                    Write-Host "    ✓ Removed: $($app.Name)" -ForegroundColor Gray
-                } catch {
-                    # Continue on error
-                }
-            }
-        } catch {
-            # Continue on error
-        }
-    }
-
-    Write-Status "Removed $removed bloatware packages" -Type Success
-
-    # Restart Explorer
-    Write-Host "  → Restarting Windows Explorer..." -ForegroundColor Gray
-    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 800
-    Start-Process explorer.exe -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
 }
 
 function Enable-SecurityHardening {
@@ -686,24 +512,93 @@ function Enable-SecurityHardening {
     #>
     Write-Status "Enabling security hardening features" -Type Step
 
-    Write-Host "  → Configuring Windows Defender..." -ForegroundColor Gray
+    Write-Host "  → Configuring Windows Defender..."
     try {
-        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-        Set-MpPreference -EnableControlledFolderAccess Enabled -ErrorAction SilentlyContinue
-    } catch { }
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        Set-MpPreference -EnableControlledFolderAccess Enabled
+        Write-Status "Windows Defender settings applied." -Type Success
+    } catch {
+        Write-Status "Failed to apply some Windows Defender settings." -Type Warning
+    }
 
-    Write-Host "  → Configuring Windows Firewall..." -ForegroundColor Gray
+    Write-Host "  → Configuring Windows Firewall..."
     try {
-        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True -ErrorAction SilentlyContinue
-    } catch { }
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+        Write-Status "Windows Firewall enabled for all profiles." -Type Success
+    } catch {
+        Write-Status "Failed to enable Windows Firewall." -Type Warning
+    }
 
-    Write-Host "  → Ensuring UAC is enabled..." -ForegroundColor Gray
+    Write-Host "  → Ensuring UAC is enabled..."
     try {
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" `
-            -Name "EnableLUA" -Value 1 -ErrorAction SilentlyContinue
-    } catch { }
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 1
+        Write-Status "User Account Control (UAC) is enabled." -Type Success
+    } catch {
+        Write-Status "Failed to ensure UAC is enabled." -Type Warning
+    }
+}
 
-    Write-Status "Security hardening applied" -Type Success
+function Remove-Bloatware {
+    <#
+    .SYNOPSIS
+        Removes bloatware and pre-installed applications.
+    #>
+    Write-Status -Message "Removing bloatware..." -Type Step
+
+    $bloatwarePatterns = @(
+        "*XboxApp*", "*Xbox.TCUI*", "*XboxGameOverlay*", "*XboxGamingOverlay*",
+        "*XboxSpeechToTextOverlay*", "*ZuneVideo*", "*ZuneMusic*", "*WindowsMaps*",
+        "*People*", "*YourPhone*", "*MixedReality.Portal*", "*MicrosoftSolitaireCollection*",
+        "*MinecraftUWP*", "*Microsoft3DViewer*", "*PaintStudio*", "*SkypeApp*",
+        "*GetHelp*", "*Todos*", "*Clipchamp*", "*WeatherApp*", "*CameraApp*"
+    )
+
+    $removedCount = 0
+    foreach ($pattern in $bloatwarePatterns) {
+        try {
+            $apps = Get-AppxPackage -AllUsers -Name $pattern -ErrorAction SilentlyContinue
+            foreach ($app in $apps) {
+                try {
+                    Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Stop
+                    Write-Status -Message "Removed: $($app.Name)" -Type Success
+                    $removedCount++
+                } catch {
+                    Write-Status -Message "Failed to remove: $($app.Name)" -Type Warning
+                }
+            }
+        } catch {
+            # Ignore errors finding packages
+        }
+    }
+
+    Write-Status -Message "Removed $removedCount bloatware packages." -Type Info
+
+    # Restart Explorer to apply changes
+    Write-Status -Message "Restarting Windows Explorer..." -Type Info
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    Start-Process explorer.exe -ErrorAction SilentlyContinue
+}
+
+function Show-CompletionSummary {
+    <#
+    .SYNOPSIS
+        Displays a summary of the script's execution.
+    #>
+    $duration = (Get-Date) - $START_TIME
+
+    Write-Host "`n" + ("=" * 80)
+    Write-Host "╔════════════════════════════════════════════════════════════════════════════╗"
+    Write-Host "║                            SCRIPT EXECUTION SUMMARY                          ║"
+    Write-Host "╚════════════════════════════════════════════════════════════════════════════╝"
+    Write-Host ("=" * 80) + "`n"
+
+    Write-Status -Message "Execution Time: $($duration.Hours)h $($duration.Minutes)m $($duration.Seconds)s" -Type Info
+    Write-Status -Message "Log File: $LOG_FILE" -Type Info
+
+    Write-Host "`n" + ("=" * 80)
+    Write-Host "Please restart your computer for all changes to take effect."
+    Write-Host ("=" * 80) + "`n"
 }
 
 function Schedule-MaintenanceTasks {
@@ -713,122 +608,72 @@ function Schedule-MaintenanceTasks {
     #>
     Write-Status "Scheduling automated maintenance tasks" -Type Step
 
-    Write-Host "  → Creating WinGet auto-update task..." -ForegroundColor Gray
+    Write-Host "  → Creating WinGet auto-update task..."
     try {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-            -Argument "-NoProfile -WindowStyle Hidden -Command `"winget upgrade --all -h`""
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"winget upgrade --all --accept-package-agreements --accept-source-agreements`""
         $trigger = New-ScheduledTaskTrigger -AtLogon
-        Register-ScheduledTask -TaskName "Winget-Auto-Update" -Action $action -Trigger $trigger `
-            -Force -ErrorAction SilentlyContinue | Out-Null
-        Write-Host "    ✓ Auto-update task created" -ForegroundColor Green
+        Register-ScheduledTask -TaskName "Winget-Auto-Update" -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+        Write-Status "WinGet auto-update task created successfully." -Type Success
     } catch {
-        Write-Host "    ⚠ Auto-update task creation skipped" -ForegroundColor Yellow
+        Write-Status "Failed to create WinGet auto-update task." -Type Warning
     }
 
-    Write-Status "Maintenance tasks scheduled" -Type Success
+    Write-Host "  → Creating installer cache cleanup task..."
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"Remove-Item -Path \"$env:TEMP\\*\" -Recurse -Force -ErrorAction SilentlyContinue`""
+        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At "3am"
+        Register-ScheduledTask -TaskName "Installer-Cache-Cleanup" -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+        Write-Status "Installer cache cleanup task created successfully." -Type Success
+    } catch {
+        Write-Status "Failed to create installer cache cleanup task." -Type Warning
+    }
 }
 
-function Show-CompletionSummary {
-    <#
-    .SYNOPSIS
-        Display comprehensive execution summary
-    #>
-    $duration = (Get-Date) - $START_TIME
-    
-    Write-Host "`n" + ("=" * 90) -ForegroundColor Cyan
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-    Write-Host "  ║                    ✓ INSTALLATION COMPLETED                           ║" -ForegroundColor Green
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
-    Write-Host ("=" * 90) -ForegroundColor Cyan
-    
-    Write-Host "`n📊 EXECUTION SUMMARY" -ForegroundColor Yellow
-    Write-Host "  • Execution Time: $($duration.Hours)h $($duration.Minutes)m $($duration.Seconds)s" -ForegroundColor White
-    Write-Host "  • Log File: $LOG_FILE" -ForegroundColor White
-    Write-Host "  • System: $TARGET_OS | $TARGET_CPU" -ForegroundColor White
-    
-    Write-Host "`n✅ COMPLETED OPERATIONS" -ForegroundColor Green
-    Write-Host "  ✓ Chrome downloaded and installed (parallel download)" -ForegroundColor Green
-    Write-Host "  ✓ 50+ software packages installed" -ForegroundColor Green
-    Write-Host "  ✓ System performance optimizations applied" -ForegroundColor Green
-    Write-Host "  ✓ Registry tweaks for gaming/productivity applied" -ForegroundColor Green
-    Write-Host "  ✓ Bloatware removed" -ForegroundColor Green
-    Write-Host "  ✓ Security hardening enabled" -ForegroundColor Green
-    Write-Host "  ✓ Maintenance tasks scheduled" -ForegroundColor Green
-    
-    Write-Host "`n📋 RECOMMENDED NEXT STEPS" -ForegroundColor Cyan
-    Write-Host "  1. Restart your computer for all changes to take effect" -ForegroundColor White
-    Write-Host "  2. Review the log file for detailed installation information" -ForegroundColor White
-    Write-Host "  3. Run Windows Update to install latest drivers and patches" -ForegroundColor White
-    Write-Host "  4. Configure your NVIDIA/AMD drivers if needed" -ForegroundColor White
-    Write-Host "  5. Enable hardware acceleration in Chrome and other applications" -ForegroundColor White
-    
-    Write-Host "`n" + ("=" * 90) + "`n" -ForegroundColor Cyan
-}
-
-# ===========================
-# MAIN EXECUTION FLOW
-# ===========================
+# =====================================================================================================================
+# Main Execution
+# =====================================================================================================================
 
 Initialize-Script
 
 try {
     # Phase 1: Prerequisites
-    Write-Status "PHASE 1: System Checks and Prerequisites" -Type Step
-    Write-Host ""
-    Ensure-ModuleIsInstalled | Out-Null
-    Write-Host ""
+    Write-Status -Message "PHASE 1: System Checks and Prerequisites" -Type Step
+    Ensure-ModuleIsInstalled
 
-    # Phase 2: Chrome Installation
-    Write-Status "PHASE 2: Installing Core Software" -Type Step
-    Write-Host ""
-    Write-Status "Google Chrome 64-bit (Enterprise - Parallel Download)" -Type Info
-    Install-Chrome | Out-Null
-    Write-Host ""
-
-    # Phase 3: Package Selection and Installation
-    Write-Status "PHASE 3: Application Installation" -Type Step
-    Write-Host ""
+    # Phase 2: Application Installation
+    Write-Status -Message "PHASE 2: Application Installation" -Type Step
     $selectedPackages = Select-Applications
-    if ($selectedPackages -and $selectedPackages.Count -gt 0) {
-        Write-Status "Installing $($selectedPackages.Count) packages from WinGet..." -Type Info
-        Write-Host ""
+    if ($selectedPackages) {
         foreach ($package in $selectedPackages) {
             Install-WingetPackage -PackageId $package
         }
-        Write-Host ""
-    } else {
-        Write-Status "No packages selected - skipping installation" -Type Warning
-        Write-Host ""
+    }
+    else {
+        Write-Status -Message "No applications selected. Skipping installation." -Type Info
     }
 
-    # Phase 4: System Optimization
-    Write-Status "PHASE 4: System Performance Optimization" -Type Step
-    Write-Host ""
-    Optimize-SystemPerformance
-    Optimize-RegistryPerformance
-    Write-Host ""
-
-    # Phase 5: Cleanup and Hardening
-    Write-Status "PHASE 5: Cleanup and Security Hardening" -Type Step
-    Write-Host ""
-    Remove-Bloatware
+    # Phase 3: System Optimization & Hardening
+    Write-Status -Message "PHASE 3: System Optimization & Hardening" -Type Step
+    Optimize-System
     Enable-SecurityHardening
+
+    # Phase 6: Cleanup
+    Write-Status -Message "PHASE 6: Cleanup" -Type Step
+    Remove-Bloatware
+
+    # Phase 7: Maintenance
+    Write-Status -Message "PHASE 7: Maintenance" -Type Step
     Schedule-MaintenanceTasks
-    Write-Host ""
 
-    # Display completion summary
+    # Phase 8: Completion Summary
+    Write-Status -Message "PHASE 8: Completion Summary" -Type Step
     Show-CompletionSummary
-
-} catch {
-    Write-Status "FATAL ERROR OCCURRED" -Type Error
-    Write-Host $_.Exception.Message -ForegroundColor Red
-    Write-Host $_.ScriptStackTrace -ForegroundColor Red
-    Start-Sleep -Seconds 5
-} finally {
-    try {
-        Stop-Transcript -ErrorAction SilentlyContinue
-    } catch { }
-    
-    Write-Host "Press Enter to exit..." -ForegroundColor Cyan
+}
+catch {
+    Write-Status -Message "An unexpected error occurred. Please check the log file for more details." -Type Error
+}
+finally {
+    Write-Status -Message "Script execution finished. Press Enter to exit." -Type Info
     Read-Host | Out-Null
+    Stop-Transcript | Out-Null
 }
