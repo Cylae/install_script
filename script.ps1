@@ -276,29 +276,28 @@ function Select-Applications {
     $form.MaximizeBox = $false
     $form.MinimizeBox = $false
 
-    $tabControl = New-Object System.Windows.Forms.TabControl
-    $tabControl.Location = New-Object System.Drawing.Point(10, 40)
-    $tabControl.Size = New-Object System.Drawing.Size(760, 450)
-    $form.Controls.Add($tabControl)
-
     $allCheckboxes = @()
 
-    foreach ($category in $packages.Keys) {
-        $tabPage = New-Object System.Windows.Forms.TabPage
-        $tabPage.Text = $category
-        $tabControl.Controls.Add($tabPage)
+    $mainPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $mainPanel.Location = New-Object System.Drawing.Point(10, 40)
+    $mainPanel.Size = New-Object System.Drawing.Size(760, 450)
+    $mainPanel.Dock = "Fill"
+    $mainPanel.AutoScroll = $true
+    $form.Controls.Add($mainPanel)
 
-        $panel = New-Object System.Windows.Forms.FlowLayoutPanel
-        $panel.Dock = "Fill"
-        $panel.AutoScroll = $true
-        $tabPage.Controls.Add($panel)
+    foreach ($category in $packages.Keys) {
+        $categoryLabel = New-Object System.Windows.Forms.Label
+        $categoryLabel.Text = $category
+        $categoryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $categoryLabel.Width = 740
+        $mainPanel.Controls.Add($categoryLabel)
 
         foreach ($package in $packages[$category]) {
             $checkbox = New-Object System.Windows.Forms.CheckBox
             $checkbox.Text = $package
             $checkbox.Checked = $true
             $checkbox.Width = 350
-            $panel.Controls.Add($checkbox)
+            $mainPanel.Controls.Add($checkbox)
             $allCheckboxes += $checkbox
         }
     }
