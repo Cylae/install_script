@@ -360,7 +360,10 @@ function Select-Applications {
     $result = $form.ShowDialog()
 
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $allCheckboxes | Where-Object { $_.Checked -and $_.Visible } | ForEach-Object { $_.Text }
+        $selectedPackages = $mainPanel.Controls | Where-Object {
+            $_.GetType().Name -eq 'CheckBox' -and $_.Checked -and $_.Visible
+        } | ForEach-Object { $_.Text }
+        return $selectedPackages
     }
     else {
         return @()
