@@ -55,11 +55,6 @@ Function Ensure-ModuleIsInstalled {
         Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
         return
     }
-}
-
-Function Select-Applications {
-    # Ensure WinGet client module is installed
-    Ensure-ModuleIsInstalled
 
     # Import the module
     try {
@@ -405,7 +400,6 @@ Function Register-WingetAutoUpgradeTask {
         # The task will use the defaults (don't start on battery, stop if switching to battery).
         $settings = New-ScheduledTaskSettingsSet `
             -RunOnlyIfNetworkAvailable `         # Waits for network connection
-            -MultipleInstances IgnoreNew `       # Replaced -NewInstance for older systems
             -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
             -StartWhenAvailable                 # Run if the logon was missed (e.g. machine was off)
 
