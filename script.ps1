@@ -361,7 +361,7 @@ function Select-Applications {
 
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
         $selectedPackages = $mainPanel.Controls | Where-Object {
-            $_.GetType().Name -eq 'CheckBox' -and $_.Checked -and $_.Visible
+            $_.GetType().Name -eq 'CheckBox' -and $_.Checked
         } | ForEach-Object { $_.Text }
         return $selectedPackages
     }
@@ -411,21 +411,35 @@ function Optimize-System {
     $powerPlanGuid = $null
     $powerPlanName = $null
 
-    $ultimateGuid = (powercfg -list | Where-Object { $_ -match "Ultimate Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
-    $highPerfGuid = (powercfg -list | Where-Object { $_ -match "High Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
-    $balancedGuid = (powercfg -list | Where-Object { $_ -match "Balanced" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+    # Well-known GUIDs for power plans
+    $ultimateGuid = "e9a42b02-d5df-448d-aa00-03f14749eb61"
+    $highPerfGuid = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+    $balancedGuid = "381b4222-f694-41f0-9685-ff5bb260df2e"
 
-    if ($ultimateGuid) {
-        $powerPlanGuid = $ultimateGuid
-        $powerPlanName = "Ultimate Performance"
+    $powerPlans = powercfg -list | ForEach-Object {
+        if ($_ -match "GUID: (.*) \((.*)\)") {
+            [PSCustomObject]@{
+                Guid = $matches[1].Trim()
+                Name = $matches[2].Trim()
+            }
+        }
     }
-    elseif ($highPerfGuid) {
-        $powerPlanGuid = $highPerfGuid
-        $powerPlanName = "High Performance"
+
+    $ultimatePlan = $powerPlans | Where-Object { $_.Guid -eq $ultimateGuid }
+    $highPerfPlan = $powerPlans | Where-Object { $_.Guid -eq $highPerfGuid }
+    $balancedPlan = $powerPlans | Where-Object { $_.Guid -eq $balancedGuid }
+
+    if ($ultimatePlan) {
+        $powerPlanGuid = $ultimatePlan.Guid
+        $powerPlanName = $ultimatePlan.Name
     }
-    elseif ($balancedGuid) {
-        $powerPlanGuid = $balancedGuid
-        $powerPlanName = "Balanced"
+    elseif ($highPerfPlan) {
+        $powerPlanGuid = $highPerfPlan.Guid
+        $powerPlanName = $highPerfPlan.Name
+    }
+    elseif ($balancedPlan) {
+        $powerPlanGuid = $balancedPlan.Guid
+        $powerPlanName = $balancedPlan.Name
     }
 
     if ($powerPlanGuid) {
