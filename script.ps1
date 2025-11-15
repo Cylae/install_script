@@ -49,7 +49,7 @@ Function Ensure-ModuleIsInstalled {
     # Install the module
     try {
         Write-Host "Installing module '$ModuleName'..." -ForegroundColor Cyan
-        Install-Module -Name $ModuleName -Force -ErrorAction Stop
+        Install-Module -Name $ModuleName -AcceptLicense -Force -ErrorAction Stop
         Write-Host "Module '$ModuleName' installed successfully." -ForegroundColor Green
     } catch {
         Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
