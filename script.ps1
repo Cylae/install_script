@@ -49,12 +49,17 @@ Function Ensure-ModuleIsInstalled {
     # Install the module
     try {
         Write-Host "Installing module '$ModuleName'..." -ForegroundColor Cyan
-        Install-Module -Name $ModuleName -AcceptLicense -Force -ErrorAction Stop
+        Install-Module -Name $ModuleName -Force -ErrorAction Stop
         Write-Host "Module '$ModuleName' installed successfully." -ForegroundColor Green
     } catch {
         Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
         return
     }
+}
+
+Function Select-Applications {
+    # Ensure WinGet client module is installed
+    Ensure-ModuleIsInstalled
 
     # Import the module
     try {
@@ -150,7 +155,13 @@ Function Select-Applications {
         "Microsoft.VCRedist.2015+.x86",
         "Microsoft.DotNet.Runtime.9"
     )
-    $initialPackages = Find-WinGetPackage -Id $initialPackageIds
+    $initialPackages = @()
+    foreach ($packageId in $initialPackageIds) {
+        $package = Find-WinGetPackage -Id $packageId
+        if ($null -ne $package) {
+            $initialPackages += $package
+        }
+    }
     & $populateList $initialPackages $initialPackageIds
 
     $form.TopMost = $true
