@@ -3,10 +3,10 @@
 
 <#
 .SYNOPSIS
-    A comprehensive post-installation and optimization script for Windows 11.
+    A comprehensive post-installation and optimization script for Windows.
 
 .DESCRIPTION
-    This script automates the post-installation process for Windows 11 by providing a suite of powerful features, including:
+    This script automates the post-installation process for Windows by providing a suite of powerful features, including:
     - A user-friendly graphical interface for selecting and installing a curated list of popular and essential applications.
     - Automated installation of Google Chrome.
     - System optimizations for enhanced performance and privacy, including power plan adjustments and service management.
@@ -26,13 +26,13 @@
 # Configuration and Constants
 # =====================================================================================================================
 
-$ErrorActionPreference = "SilentlyContinue"
+$ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 # Script metadata
 $SCRIPT_VERSION = "3.1.0"
 $SCRIPT_AUTHOR = "Cylae"
-$TARGET_OS = "Windows 11 24H2"
+$TARGET_OS = "Windows 10 & 11"
 $START_TIME = Get-Date
 
 # Paths
@@ -54,7 +54,7 @@ function Initialize-Script {
 
     Write-Host "`n" + ("=" * 80)
     Write-Host "╔════════════════════════════════════════════════════════════════════════════╗"
-    Write-Host "║             WINDOWS 11 POST-INSTALLATION SCRIPT v$SCRIPT_VERSION             ║"
+    Write-Host "║              WINDOWS POST-INSTALLATION SCRIPT v$SCRIPT_VERSION              ║"
     Write-Host "║                  Author: $SCRIPT_AUTHOR | Target OS: $TARGET_OS                  ║"
     Write-Host "╚════════════════════════════════════════════════════════════════════════════╝"
     Write-Host ("=" * 80) + "`n"
@@ -74,10 +74,10 @@ function Initialize-Script {
         exit 1
     }
 
-    # Verify Windows 11
-    $osVersion = (Get-CimInstance -ClassName Win32_OperatingSystem).Version
-    if ($osVersion -notmatch "^10\.0\.(22|23|24|25|26)\d{3}$") {
-        Write-Status -Message "This script is optimized for Windows 11. Some features may not work as expected on other versions." -Type Warning
+    # Verify Windows version
+    $osVersion = [System.Environment]::OSVersion.Version
+    if ($osVersion.Major -ne 10 -or $osVersion.Build -lt 19041) {
+        Write-Status -Message "This script is designed for Windows 10 (version 2004+) and Windows 11. Running on an unsupported OS version may lead to unexpected results." -Type Warning
     }
 
     # Verify STA mode for GUI
@@ -131,32 +131,30 @@ function Ensure-ModuleIsInstalled {
     )
 
     if (Get-Module -Name $ModuleName -ListAvailable) {
-        Write-Status -Message "Module '$ModuleName' is already installed." -Type Success
+        Write-Status "Module '$ModuleName' is already installed." -Type Success
         return
     }
 
-    Write-Status -Message "Installing PowerShell module: $ModuleName" -Type Step
+    Write-Status "Installing PowerShell module: $ModuleName..." -Type Step
 
     try {
-        # Ensure NuGet provider is installed
-        if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
-        }
+        Write-Host "  → Ensuring PowerShellGet is up-to-date..."
+        Install-Module -Name PowerShellGet -Force -Scope AllUsers -AllowClobber -ErrorAction Stop | Out-Null
 
-        # Trust the PSGallery repository
-        if ((Get-PSRepository -Name "PSGallery").InstallationPolicy -ne "Trusted") {
-            Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -Scope AllUsers
-        }
+        Write-Host "  → Ensuring NuGet provider is installed..."
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null
 
-        # Install the module
+        Write-Host "  → Trusting the PSGallery repository..."
+        Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+
+        Write-Host "  → Installing module '$ModuleName'..."
         Install-Module -Name $ModuleName -Force -Scope AllUsers -AllowClobber -ErrorAction Stop | Out-Null
-        Import-Module -Name $ModuleName -ErrorAction Stop | Out-Null
 
-        Write-Status -Message "Module '$ModuleName' installed successfully." -Type Success
+        Write-Status "Module '$ModuleName' installed and imported successfully." -Type Success
     }
     catch {
-        Write-Status -Message "Failed to install module '$ModuleName'. Please install it manually and re-run the script." -Type Error
-        Start-Sleep -Seconds 5
+        Write-Status "An error occurred during the installation of module '$ModuleName'." -Type Error
+        Write-Status "Please try to install it manually by running 'Install-Module -Name $ModuleName -Force' in an Administrator PowerShell window and then re-run the script." -Type Info
         exit 1
     }
 }
@@ -279,17 +277,20 @@ function Select-Applications {
     $allCheckboxes = @()
 
     $mainPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-    $mainPanel.Location = New-Object System.Drawing.Point(10, 40)
-    $mainPanel.Size = New-Object System.Drawing.Size(760, 450)
-    $mainPanel.Dock = "Fill"
+    $mainPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
     $mainPanel.AutoScroll = $true
-    $form.Controls.Add($mainPanel)
+    $mainPanel.Padding = New-Object System.Windows.Forms.Padding(10)
 
-    foreach ($category in $packages.Keys) {
+    $searchBox.Dock = [System.Windows.Forms.DockStyle]::Top
+    $mainPanel.Controls.Add($searchBox)
+
+    foreach ($category in $packages.Keys.GetEnumerator() | Sort-Object) {
         $categoryLabel = New-Object System.Windows.Forms.Label
         $categoryLabel.Text = $category
         $categoryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $categoryLabel.Width = 740
+        $categoryLabel.AutoSize = $true
+        $categoryLabel.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 5)
+        $mainPanel.SetFlowBreak($categoryLabel, $true)
         $mainPanel.Controls.Add($categoryLabel)
 
         foreach ($package in $packages[$category]) {
@@ -297,62 +298,66 @@ function Select-Applications {
             $checkbox.Text = $package
             $checkbox.Checked = $true
             $checkbox.Width = 350
+            $checkbox.Margin = New-Object System.Windows.Forms.Padding(20, 0, 0, 0)
             $mainPanel.Controls.Add($checkbox)
             $allCheckboxes += $checkbox
         }
     }
+    # Top panel for controls
+    $topPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $topPanel.Dock = [System.Windows.Forms.DockStyle]::Top
+    $topPanel.Padding = New-Object System.Windows.Forms.Padding(10, 10, 10, 0)
+    $topPanel.Height = 40
 
     $searchLabel = New-Object System.Windows.Forms.Label
     $searchLabel.Text = "Search:"
-    $searchLabel.Location = New-Object System.Drawing.Point(10, 15)
-    $form.Controls.Add($searchLabel)
+    $searchLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left
 
     $searchBox = New-Object System.Windows.Forms.TextBox
-    $searchBox.Location = New-Object System.Drawing.Point(70, 12)
     $searchBox.Size = New-Object System.Drawing.Size(200, 20)
+    $searchBox.Anchor = [System.Windows.Forms.AnchorStyles]::Left
     $searchBox.add_TextChanged({
         $searchText = $searchBox.Text.ToLower()
+        $mainPanel.SuspendLayout() # Pause layout updates for performance
         foreach ($checkbox in $allCheckboxes) {
             $checkbox.Visible = $checkbox.Text.ToLower().Contains($searchText)
         }
+        $mainPanel.ResumeLayout() # Resume layout updates
     })
-    $form.Controls.Add($searchBox)
 
     $selectAllButton = New-Object System.Windows.Forms.Button
     $selectAllButton.Text = "Select All"
-    $selectAllButton.Location = New-Object System.Drawing.Point(550, 12)
-    $selectAllButton.add_Click({
-        foreach ($checkbox in $allCheckboxes) {
-            $checkbox.Checked = $true
-        }
-    })
-    $form.Controls.Add($selectAllButton)
+    $selectAllButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left
+    $selectAllButton.add_Click({ foreach ($checkbox in $allCheckboxes) { $checkbox.Checked = $true } })
 
     $deselectAllButton = New-Object System.Windows.Forms.Button
     $deselectAllButton.Text = "Deselect All"
-    $deselectAllButton.Location = New-Object System.Drawing.Point(650, 12)
-    $deselectAllButton.add_Click({
-        foreach ($checkbox in $allCheckboxes) {
-            $checkbox.Checked = $false
-        }
-    })
-    $form.Controls.Add($deselectAllButton)
+    $deselectAllButton.Anchor = [System.Windows.Forms.AnchorStyles]::Left
+    $deselectAllButton.add_Click({ foreach ($checkbox in $allCheckboxes) { $checkbox.Checked = $false } })
+
+    $topPanel.Controls.AddRange(@($searchLabel, $searchBox, $selectAllButton, $deselectAllButton))
+
+    # Bottom panel for buttons
+    $bottomPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+    $bottomPanel.Dock = [System.Windows.Forms.DockStyle]::Bottom
+    $bottomPanel.FlowDirection = [System.Windows.Forms.FlowDirection]::RightToLeft
+    $bottomPanel.Padding = New-Object System.Windows.Forms.Padding(10)
+    $bottomPanel.Height = 50
 
     $okButton = New-Object System.Windows.Forms.Button
     $okButton.Text = "Install"
-    $okButton.Location = New-Object System.Drawing.Point(300, 520)
-    $okButton.Size = New-Object System.Drawing.Size(100, 30)
     $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
     $form.AcceptButton = $okButton
-    $form.Controls.Add($okButton)
 
     $cancelButton = New-Object System.Windows.Forms.Button
     $cancelButton.Text = "Cancel"
-    $cancelButton.Location = New-Object System.Drawing.Point(410, 520)
-    $cancelButton.Size = New-Object System.Drawing.Size(100, 30)
     $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $form.CancelButton = $cancelButton
-    $form.Controls.Add($cancelButton)
+
+    $bottomPanel.Controls.AddRange(@($cancelButton, $okButton))
+
+    # Add all panels to the form
+    $form.Controls.AddRange(@($mainPanel, $topPanel, $bottomPanel))
 
     $result = $form.ShowDialog()
 
@@ -367,29 +372,30 @@ function Select-Applications {
 function Install-WingetPackage {
     <#
     .SYNOPSIS
-        Installs a package using WinGet.
+        Installs a package using the WinGet PowerShell module.
     #>
     param(
         [string]$PackageId
     )
 
-    Write-Status -Message "Installing '$PackageId'..." -Type Info
-
+    Write-Status "Installing '$PackageId'..." -Type Info
     try {
-        $process = Start-Process -FilePath "winget" -ArgumentList "install --id $PackageId --accept-source-agreements --accept-package-agreements" -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
-
-        if ($process.ExitCode -eq 0) {
-            Write-Status -Message "'$PackageId' installed successfully." -Type Success
-        }
-        elseif ($process.ExitCode -eq -1978335189) {
-            Write-Status -Message "'$PackageId' is already installed." -Type Info
+        $package = Find-WinGetPackage -Id $PackageId -ErrorAction Stop
+        if ($package) {
+            Install-WinGetPackage -Id $PackageId -AcceptPackageAgreements -AcceptSourceAgreements -ErrorAction Stop | Out-Null
+            Write-Status "'$PackageId' installed successfully." -Type Success
         }
         else {
-            Write-Status -Message "Failed to install '$PackageId'. Exit code: $($process.ExitCode)" -Type Error
+            Write-Status "Package '$PackageId' not found." -Type Warning
         }
     }
     catch {
-        Write-Status -Message "An error occurred while installing '$PackageId'." -Type Error
+        if ($_.Exception.Message -like "*0x80070057*") { # Package already installed
+            Write-Status "'$PackageId' is already installed." -Type Info
+        } else {
+            Write-Status "Failed to install '$PackageId'." -Type Error
+            Write-Status "  Reason: $($_.Exception.Message)" -Type Info
+        }
     }
 }
 
@@ -401,22 +407,37 @@ function Optimize-System {
     Write-Status -Message "Applying system optimizations..." -Type Step
 
     # Set power plan
-    $powerPlan = powercfg -list | Where-Object { $_ -match "Ultimate Performance" }
-    if ($powerPlan) {
-        $guid = ($powerPlan -split " ")[3]
-        powercfg -setactive $guid
-        Write-Status -Message "Power plan set to 'Ultimate Performance'." -Type Success
+    $powerPlanGuid = $null
+    $powerPlanName = $null
+
+    $ultimateGuid = (powercfg -list | Where-Object { $_ -match "Ultimate Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+    $highPerfGuid = (powercfg -list | Where-Object { $_ -match "High Performance" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+    $balancedGuid = (powercfg -list | Where-Object { $_ -match "Balanced" } | ForEach-Object { $_ -split ' ' | Select -Index 3 })
+
+    if ($ultimateGuid) {
+        $powerPlanGuid = $ultimateGuid
+        $powerPlanName = "Ultimate Performance"
+    }
+    elseif ($highPerfGuid) {
+        $powerPlanGuid = $highPerfGuid
+        $powerPlanName = "High Performance"
+    }
+    elseif ($balancedGuid) {
+        $powerPlanGuid = $balancedGuid
+        $powerPlanName = "Balanced"
+    }
+
+    if ($powerPlanGuid) {
+        try {
+            powercfg -setactive $powerPlanGuid
+            Write-Status "Power plan set to '$powerPlanName'." -Type Success
+        }
+        catch {
+            Write-Status "Failed to set the power plan to '$powerPlanName'." -Type Warning
+        }
     }
     else {
-        $powerPlan = powercfg -list | Where-Object { $_ -match "High Performance" }
-        if ($powerPlan) {
-            $guid = ($powerPlan -split " ")[3]
-            powercfg -setactive $guid
-            Write-Status -Message "Power plan set to 'High Performance'." -Type Success
-        }
-        else {
-            Write-Status -Message "Could not find 'Ultimate Performance' or 'High Performance' power plan." -Type Warning
-        }
+        Write-Status "Could not find a suitable power plan to apply." -Type Warning
     }
 
     # Disable sleep/hibernate
@@ -595,6 +616,16 @@ function Schedule-MaintenanceTasks {
         Write-Status "WinGet auto-update task created successfully." -Type Success
     } catch {
         Write-Status "Failed to create WinGet auto-update task." -Type Warning
+    }
+
+    Write-Host "  → Creating installer cache cleanup task..."
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"Remove-Item -Path \"$env:TEMP\\*\" -Recurse -Force -ErrorAction SilentlyContinue`""
+        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At "3am"
+        Register-ScheduledTask -TaskName "Installer-Cache-Cleanup" -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+        Write-Status "Installer cache cleanup task created successfully." -Type Success
+    } catch {
+        Write-Status "Failed to create installer cache cleanup task." -Type Warning
     }
 }
 
