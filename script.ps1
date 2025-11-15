@@ -276,33 +276,12 @@ function Select-Applications {
 
     $allCheckboxes = @()
 
+    # Main panel for checkboxes
     $mainPanel = New-Object System.Windows.Forms.FlowLayoutPanel
     $mainPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
     $mainPanel.AutoScroll = $true
     $mainPanel.Padding = New-Object System.Windows.Forms.Padding(10)
 
-    $searchBox.Dock = [System.Windows.Forms.DockStyle]::Top
-    $mainPanel.Controls.Add($searchBox)
-
-    foreach ($category in $packages.Keys.GetEnumerator() | Sort-Object) {
-        $categoryLabel = New-Object System.Windows.Forms.Label
-        $categoryLabel.Text = $category
-        $categoryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $categoryLabel.AutoSize = $true
-        $categoryLabel.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 5)
-        $mainPanel.SetFlowBreak($categoryLabel, $true)
-        $mainPanel.Controls.Add($categoryLabel)
-
-        foreach ($package in $packages[$category]) {
-            $checkbox = New-Object System.Windows.Forms.CheckBox
-            $checkbox.Text = $package
-            $checkbox.Checked = $true
-            $checkbox.Width = 350
-            $checkbox.Margin = New-Object System.Windows.Forms.Padding(20, 0, 0, 0)
-            $mainPanel.Controls.Add($checkbox)
-            $allCheckboxes += $checkbox
-        }
-    }
     # Top panel for controls
     $topPanel = New-Object System.Windows.Forms.FlowLayoutPanel
     $topPanel.Dock = [System.Windows.Forms.DockStyle]::Top
@@ -356,6 +335,25 @@ function Select-Applications {
 
     $bottomPanel.Controls.AddRange(@($cancelButton, $okButton))
 
+    foreach ($category in $packages.Keys.GetEnumerator() | Sort-Object) {
+        $categoryLabel = New-Object System.Windows.Forms.Label
+        $categoryLabel.Text = $category
+        $categoryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $categoryLabel.AutoSize = $true
+        $categoryLabel.Margin = New-Object System.Windows.Forms.Padding(0, 10, 0, 5)
+        $mainPanel.SetFlowBreak($categoryLabel, $true)
+        $mainPanel.Controls.Add($categoryLabel)
+
+        foreach ($package in $packages[$category]) {
+            $checkbox = New-Object System.Windows.Forms.CheckBox
+            $checkbox.Text = $package
+            $checkbox.Checked = $true
+            $checkbox.Width = 350
+            $checkbox.Margin = New-Object System.Windows.Forms.Padding(20, 0, 0, 0)
+            $mainPanel.Controls.Add($checkbox)
+            $allCheckboxes += $checkbox
+        }
+    }
     # Add all panels to the form
     $form.Controls.AddRange(@($mainPanel, $topPanel, $bottomPanel))
 
