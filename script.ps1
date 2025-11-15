@@ -16,15 +16,59 @@
 
 # --- 1. Function Definitions ---
 
+Function Ensure-ModuleIsInstalled {
+    param(
+        [string]$ModuleName = "Microsoft.WinGet.Client"
+    )
+
+    # Check if the module is already imported or available
+    if (Get-Module -Name $ModuleName -ListAvailable) {
+        Write-Host "Module '$ModuleName' is already installed." -ForegroundColor Green
+        Import-Module -Name $ModuleName
+        return
+    }
+
+    Write-Host "Module '$ModuleName' not found. Starting installation process..." -ForegroundColor Yellow
+
+    # Ensure PowerShellGet is up-to-date
+    try {
+        Write-Host "Checking for the latest version of PowerShellGet..."
+        Install-Module -Name PowerShellGet -Force -ErrorAction Stop
+        Write-Host "PowerShellGet is up-to-date." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to update PowerShellGet. Error: $_" -ForegroundColor Red
+        return
+    }
+
+    # Ensure PSGallery is a trusted repository
+    if ((Get-PSRepository | Where-Object { $_.Name -eq 'PSGallery' }).InstallationPolicy -ne 'Trusted') {
+        Write-Host "Setting PSGallery as a trusted repository."
+        Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+    }
+
+    # Install the module
+    try {
+        Write-Host "Installing module '$ModuleName'..." -ForegroundColor Cyan
+        Install-Module -Name $ModuleName -Force -ErrorAction Stop
+        Write-Host "Module '$ModuleName' installed successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
+        return
+    }
+
+    # Import the module
+    try {
+        Write-Host "Importing module '$ModuleName'..."
+        Import-Module -Name $ModuleName -ErrorAction Stop
+        Write-Host "Module '$ModuleName' imported successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to import module '$ModuleName' after installation. Error: $_" -ForegroundColor Red
+    }
+}
+
 Function Select-Applications {
     # Ensure WinGet client module is installed
-    try {
-        Import-Module -Name Microsoft.WinGet.Client -ErrorAction Stop
-    } catch {
-        Write-Host "Microsoft.WinGet.Client module not found. Installing..." -ForegroundColor Yellow
-        Install-Module -Name Microsoft.WinGet.Client -AcceptLicense -Force
-        Import-Module -Name Microsoft.WinGet.Client
-    }
+    Ensure-ModuleIsInstalled
 
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
