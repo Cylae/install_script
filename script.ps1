@@ -400,7 +400,6 @@ Function Register-WingetAutoUpgradeTask {
         # The task will use the defaults (don't start on battery, stop if switching to battery).
         $settings = New-ScheduledTaskSettingsSet `
             -RunOnlyIfNetworkAvailable `         # Waits for network connection
-            -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
             -StartWhenAvailable                 # Run if the logon was missed (e.g. machine was off)
 
         # 5. Register the Task
