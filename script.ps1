@@ -218,34 +218,88 @@ function Install-Chrome {
 function Get-CuratedPackageList {
     <#
     .SYNOPSIS
-        Returns a curated list of software packages.
+        Return comprehensive list of 50+ curated software packages by category
     #>
     return @{
-        "Essentials" = @(
+        "Essential System" = @(
             "Microsoft.WindowsTerminal",
+            "Git.Git",
             "Microsoft.PowerToys",
             "7zip.7zip",
-            "Git.Git",
-            "Microsoft.VisualStudioCode",
-            "Mozilla.Firefox"
+            "Microsoft.VisualCppRedist.Latest",
+            "Microsoft.DotNet.Runtime.8",
+            "Microsoft.DotNet.DesktopRuntime.8"
         )
-        "Development" = @(
+        "Development Tools" = @(
+            "Microsoft.VisualStudioCode",
+            "JetBrains.IntelliJIDEA.Community",
+            "GitHub.GitHubDesktop",
             "Docker.DockerDesktop",
             "Postman.Postman",
-            "JetBrains.IntelliJIDEA.Community",
-            "GitHub.GitHubDesktop"
+            "Mozilla.Firefox",
+            "Insomnia.Insomnia",
+            "SublimeText.SublimeText.4"
         )
-        "Productivity" = @(
+        "Productivity & Communication" = @(
             "Discord.Discord",
             "Slack.Slack",
             "Notion.Notion",
-            "Obsidian.Obsidian"
+            "Obsidian.Obsidian",
+            "Microsoft.Office",
+            "StandardNotes.StandardNotes"
         )
-        "Media" = @(
+        "Media & Design" = @(
             "VideoLAN.VLC",
             "OBSProject.OBSStudio",
             "Audacity.Audacity",
-            "GIMP.GIMP"
+            "GIMP.GIMP",
+            "Blender.Blender",
+            "ImageMagick.ImageMagick",
+            "ffmpeg.ffmpeg"
+        )
+        "System & Admin Tools" = @(
+            "Notepad++.Notepad++",
+            "WinSCP.WinSCP",
+            "Sysinternals.ProcessExplorer",
+            "KeePass.KeePass",
+            "VirtualBox.VirtualBox",
+            "OpenVPN.OpenVPN",
+            "Transmission.Transmission",
+            "UltraISO.UltraISO"
+        )
+        "Gaming & Entertainment" = @(
+            "Valve.Steam",
+            "EpicGames.EpicGamesLauncher",
+            "GOG.Galaxy",
+            "Emulators.RetroArch"
+        )
+        "System Libraries & Runtime" = @(
+            "Microsoft.DirectX",
+            "Microsoft.VCRedist.2015+.x64",
+            "Microsoft.VCRedist.2015+.x86",
+            "NVIDIA.CUDA",
+            "AMD.AMDGPU",
+            "Vulkan.Vulkan"
+        )
+        "Security & Privacy" = @(
+            "Mozilla.Firefox.DeveloperEdition",
+            "Tor.TorBrowser",
+            "Bitwarden.Bitwarden",
+            "DupeGuru.DupeGuru"
+        )
+        "File Management & Backup" = @(
+            "SyncToy.SyncToy",
+            "Duplicati.Duplicati",
+            "FastCopy.FastCopy",
+            "Everything.Everything"
+        )
+        "Advanced Utilities" = @(
+            "BleachBit.BleachBit",
+            "Ccleaner.CCleaner",
+            "HWiNFO.HWiNFO",
+            "GPU-Z.GPU-Z",
+            "CPU-Z.CPU-Z",
+            "Fraps.Fraps"
         )
     }
 }
@@ -381,6 +435,9 @@ function Install-WingetPackage {
         if ($process.ExitCode -eq 0) {
             Write-Status -Message "'$PackageId' installed successfully." -Type Success
         }
+        elseif ($process.ExitCode -eq -1978335189) {
+            Write-Status -Message "'$PackageId' is already installed." -Type Info
+        }
         else {
             Write-Status -Message "Failed to install '$PackageId'. Exit code: $($process.ExitCode)" -Type Error
         }
@@ -468,6 +525,19 @@ function Optimize-System {
         }
     }
 
+    # Disable sleep/hibernate
+    powercfg -change monitor-timeout-ac 0
+    powercfg -change disk-timeout-ac 0
+    powercfg -change standby-timeout-ac 0
+    Write-Status -Message "Disabled sleep and hibernate timeouts." -Type Success
+
+    # Network optimization
+    netsh int tcp set global autotuninglevel=normal
+    netsh int tcp set global ecn=enabled
+    netsh int tcp set global timestamps=disabled
+    netsh int tcp set supplemental internet congestionprovider=ctcp
+    Write-Status -Message "Network optimizations applied." -Type Success
+
     # Disable unnecessary services
     $servicesToDisable = @(
         "SysMain", # Superfetch
@@ -504,11 +574,53 @@ function Optimize-System {
         }
     }
 
+    # UI and Responsiveness
+    Set-RegistryValue -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" -Type "String"
+    Set-RegistryValue -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value "1" -Type "String"
+
+    # Privacy and Telemetry
     Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -Value 0
     Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AllowCortana" -Value 0
     Set-RegistryValue -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0
     Set-RegistryValue -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowSyncProviderNotifications" -Value 0
     Set-RegistryValue -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" -Name "DisableWindowsConsumerFeatures" -Value 1
+
+    # Dark Mode
+    Set-RegistryValue "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" "AppsUseLightTheme" 0
+    Set-RegistryValue "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" "SystemUsesLightTheme" 0
+}
+
+function Enable-SecurityHardening {
+    <#
+    .SYNOPSIS
+        Enable Windows security features and hardening
+    #>
+    Write-Status "Enabling security hardening features" -Type Step
+
+    Write-Host "  → Configuring Windows Defender..."
+    try {
+        Set-MpPreference -DisableRealtimeMonitoring $false
+        Set-MpPreference -EnableControlledFolderAccess Enabled
+        Write-Status "Windows Defender settings applied." -Type Success
+    } catch {
+        Write-Status "Failed to apply some Windows Defender settings." -Type Warning
+    }
+
+    Write-Host "  → Configuring Windows Firewall..."
+    try {
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+        Write-Status "Windows Firewall enabled for all profiles." -Type Success
+    } catch {
+        Write-Status "Failed to enable Windows Firewall." -Type Warning
+    }
+
+    Write-Host "  → Ensuring UAC is enabled..."
+    try {
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableLUA" -Value 1
+        Write-Status "User Account Control (UAC) is enabled." -Type Success
+    } catch {
+        Write-Status "Failed to ensure UAC is enabled." -Type Warning
+    }
 }
 
 function Remove-Bloatware {
@@ -518,27 +630,39 @@ function Remove-Bloatware {
     #>
     Write-Status -Message "Removing bloatware..." -Type Step
 
-    $bloatware = @(
-        "Microsoft.549981C3F5F10", # Cortana
-        "Microsoft.YourPhone",
-        "Microsoft.XboxApp",
-        "Microsoft.Xbox.TCUI",
-        "Microsoft.XboxGameOverlay",
-        "Microsoft.XboxGamingOverlay",
-        "Microsoft.XboxSpeechToTextOverlay",
-        "Microsoft.ZuneVideo",
-        "Microsoft.ZuneMusic"
+    $bloatwarePatterns = @(
+        "*XboxApp*", "*Xbox.TCUI*", "*XboxGameOverlay*", "*XboxGamingOverlay*",
+        "*XboxSpeechToTextOverlay*", "*ZuneVideo*", "*ZuneMusic*", "*WindowsMaps*",
+        "*People*", "*YourPhone*", "*MixedReality.Portal*", "*MicrosoftSolitaireCollection*",
+        "*MinecraftUWP*", "*Microsoft3DViewer*", "*PaintStudio*", "*SkypeApp*",
+        "*GetHelp*", "*Todos*", "*Clipchamp*", "*WeatherApp*", "*CameraApp*"
     )
 
-    foreach ($app in $bloatware) {
+    $removedCount = 0
+    foreach ($pattern in $bloatwarePatterns) {
         try {
-            Get-AppxPackage -Name $app -AllUsers | Remove-AppxPackage -ErrorAction Stop
-            Write-Status -Message "Removed bloatware '$app'." -Type Success
-        }
-        catch {
-            Write-Status -Message "Failed to remove bloatware '$app'." -Type Warning
+            $apps = Get-AppxPackage -AllUsers -Name $pattern -ErrorAction SilentlyContinue
+            foreach ($app in $apps) {
+                try {
+                    Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Stop
+                    Write-Status -Message "Removed: $($app.Name)" -Type Success
+                    $removedCount++
+                } catch {
+                    Write-Status -Message "Failed to remove: $($app.Name)" -Type Warning
+                }
+            }
+        } catch {
+            # Ignore errors finding packages
         }
     }
+
+    Write-Status -Message "Removed $removedCount bloatware packages." -Type Info
+
+    # Restart Explorer to apply changes
+    Write-Status -Message "Restarting Windows Explorer..." -Type Info
+    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    Start-Process explorer.exe -ErrorAction SilentlyContinue
 }
 
 function Show-CompletionSummary {
@@ -560,6 +684,24 @@ function Show-CompletionSummary {
     Write-Host "`n" + ("=" * 80)
     Write-Host "Please restart your computer for all changes to take effect."
     Write-Host ("=" * 80) + "`n"
+}
+
+function Schedule-MaintenanceTasks {
+    <#
+    .SYNOPSIS
+        Schedule automated maintenance and system update tasks
+    #>
+    Write-Status "Scheduling automated maintenance tasks" -Type Step
+
+    Write-Host "  → Creating WinGet auto-update task..."
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"winget upgrade --all --accept-package-agreements --accept-source-agreements`""
+        $trigger = New-ScheduledTaskTrigger -AtLogon
+        Register-ScheduledTask -TaskName "Winget-Auto-Update" -Action $action -Trigger $trigger -Force -ErrorAction Stop | Out-Null
+        Write-Status "WinGet auto-update task created successfully." -Type Success
+    } catch {
+        Write-Status "Failed to create WinGet auto-update task." -Type Warning
+    }
 }
 
 # =====================================================================================================================
@@ -593,16 +735,21 @@ try {
     Write-Status -Message "PHASE 4: Local Application Installation" -Type Step
     Install-LocalPackage
 
-    # Phase 5: System Optimization
-    Write-Status -Message "PHASE 5: System Optimization" -Type Step
+    # Phase 5: System Optimization & Hardening
+    Write-Status -Message "PHASE 5: System Optimization & Hardening" -Type Step
     Optimize-System
+    Enable-SecurityHardening
 
     # Phase 6: Cleanup
     Write-Status -Message "PHASE 6: Cleanup" -Type Step
     Remove-Bloatware
 
-    # Phase 7: Completion Summary
-    Write-Status -Message "PHASE 7: Completion Summary" -Type Step
+    # Phase 7: Maintenance
+    Write-Status -Message "PHASE 7: Maintenance" -Type Step
+    Schedule-MaintenanceTasks
+
+    # Phase 8: Completion Summary
+    Write-Status -Message "PHASE 8: Completion Summary" -Type Step
     Show-CompletionSummary
 }
 catch {
