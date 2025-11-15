@@ -166,7 +166,6 @@ function Get-CuratedPackageList {
     #>
     return @{
         "Essential System" = @(
-            "Google.Chrome",
             "Microsoft.WindowsTerminal",
             "Git.Git",
             "Microsoft.PowerToys",
@@ -222,7 +221,6 @@ function Get-CuratedPackageList {
             "Microsoft.DirectX",
             "Microsoft.VCRedist.2015+.x64",
             "Microsoft.VCRedist.2015+.x86",
-            "NVIDIA.CUDA",
             "AMD.AMDGPU",
             "Vulkan.Vulkan"
         )
@@ -240,11 +238,15 @@ function Get-CuratedPackageList {
         )
         "Advanced Utilities" = @(
             "BleachBit.BleachBit",
-            "Ccleaner.CCleaner",
+            "Piriform.CCleaner",
             "HWiNFO.HWiNFO",
-            "GPU-Z.GPU-Z",
-            "CPU-Z.CPU-Z",
+            "TechPowerUp.GPU-Z",
+            "CPUID.CPU-Z",
             "Fraps.Fraps"
+        )
+        "Local Installers" = @(
+            "Google Chrome",
+            "NVIDIA App"
         )
     }
 }
@@ -360,9 +362,7 @@ function Select-Applications {
     $result = $form.ShowDialog()
 
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        $selectedPackages = $mainPanel.Controls | Where-Object {
-            $_.GetType().Name -eq 'CheckBox' -and $_.Checked
-        } | ForEach-Object { $_.Text }
+        $selectedPackages = $allCheckboxes | Where-Object { $_.Checked } | ForEach-Object { $_.Text }
         return $selectedPackages
     }
     else {
@@ -397,6 +397,47 @@ function Install-WingetPackage {
             Write-Status "Failed to install '$PackageId'." -Type Error
             Write-Status "  Reason: $($_.Exception.Message)" -Type Info
         }
+    }
+}
+
+function Install-LocalPackage {
+    <#
+    .SYNOPSIS
+        Installs a local package from an .exe or .msi file.
+    #>
+    param(
+        [string]$AppName
+    )
+
+    Write-Status "Prompting for installer: $AppName" -Type Step
+    $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openFileDialog.Title = "Please select the installer for $AppName"
+    $openFileDialog.Filter = "Installers (*.exe, *.msi)|*.exe;*.msi"
+    if ($openFileDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $installerPath = $openFileDialog.FileName
+        Write-Status "Attempting to install '$AppName' from '$installerPath'..." -Type Info
+
+        try {
+            # Attempt silent installation
+            $arguments = @("/i", "`"$installerPath`"", "/qn", "/norestart")
+            Start-Process "msiexec.exe" -ArgumentList $arguments -Wait -ErrorAction Stop
+            Write-Status "'$AppName' installed successfully." -Type Success
+        }
+        catch {
+            try {
+                # Fallback for .exe installers
+                $arguments = @("`"$installerPath`"", "/S", "/v`"/qn`"")
+                Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -ErrorAction Stop
+                Write-Status "'$AppName' installed successfully." -Type Success
+            }
+            catch {
+                Write-Status "Failed to install '$AppName'. Please try installing it manually." -Type Error
+                Write-Status "  Reason: $($_.Exception.Message)" -Type Info
+            }
+        }
+    }
+    else {
+        Write-Status "Skipping installation of '$AppName' as no installer was selected." -Type Info
     }
 }
 
@@ -659,8 +700,14 @@ try {
     Write-Status -Message "PHASE 2: Application Installation" -Type Step
     $selectedPackages = Select-Applications
     if ($selectedPackages) {
+        $localInstallers = @("Google Chrome", "NVIDIA App")
         foreach ($package in $selectedPackages) {
-            Install-WingetPackage -PackageId $package
+            if ($localInstallers -contains $package) {
+                Install-LocalPackage -AppName $package
+            }
+            else {
+                Install-WingetPackage -PackageId $package
+            }
         }
     }
     else {
@@ -672,16 +719,16 @@ try {
     Optimize-System
     Enable-SecurityHardening
 
-    # Phase 6: Cleanup
-    Write-Status -Message "PHASE 6: Cleanup" -Type Step
+    # Phase 4: Cleanup
+    Write-Status -Message "PHASE 4: Cleanup" -Type Step
     Remove-Bloatware
 
-    # Phase 7: Maintenance
-    Write-Status -Message "PHASE 7: Maintenance" -Type Step
+    # Phase 5: Maintenance
+    Write-Status -Message "PHASE 5: Maintenance" -Type Step
     Schedule-MaintenanceTasks
 
-    # Phase 8: Completion Summary
-    Write-Status -Message "PHASE 8: Completion Summary" -Type Step
+    # Phase 6: Completion Summary
+    Write-Status -Message "PHASE 6: Completion Summary" -Type Step
     Show-CompletionSummary
 }
 catch {
