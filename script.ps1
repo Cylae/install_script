@@ -55,11 +55,6 @@ Function Ensure-ModuleIsInstalled {
         Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
         return
     }
-}
-
-Function Select-Applications {
-    # Ensure WinGet client module is installed
-    Ensure-ModuleIsInstalled
 
     # Import the module
     try {
@@ -380,48 +375,6 @@ Function Install-LocalPackage {
     Write-Host "" # Adds a blank line for readability
 }
 
-Function Register-WingetAutoUpgradeTask {
-    [CmdletBinding()]
-    param()
-
-    $TaskName = "Winget-Auto-Upgrade"
-    Write-Host "--- Registering Automatic Winget Upgrade Task ---" -ForegroundColor Cyan
-
-    try {
-        # 1. Define the Action
-        # We must use the full command syntax Winget requires for silent operation
-        $action = New-ScheduledTaskAction -Execute "winget" -Argument "upgrade --all --accept-source-agreements --accept-package-agreements"
-
-        # 2. Define the Trigger (Runs when any user logs on)
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
-
-        # 3. Define the Principal (Runs as the user, but elevated)
-        # -RunLevel Highest ensures it has admin rights to install software
-        # -UserId "INTERACTIVE" applies this to any user who logs in.
-        $principal = New-ScheduledTaskPrincipal -RunLevel Highest -UserId "NT AUTHORITY\INTERACTIVE"
-
-        # 4. Define the Settings (Using universally compatible parameters)
-        # We are omitting battery settings for maximum compatibility.
-        # The task will use the defaults (don't start on battery, stop if switching to battery).
-        $settings = New-ScheduledTaskSettingsSet `
-            -RunOnlyIfNetworkAvailable `         # Waits for network connection
-            -MultipleInstances IgnoreNew `       # Replaced -NewInstance for older systems
-            -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
-            -StartWhenAvailable                 # Run if the logon was missed (e.g. machine was off)
-
-        # 5. Register the Task
-        # -Force will overwrite the task if it already exists
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop
-
-        Write-Host "Scheduled task '$TaskName' registered successfully." -ForegroundColor Green
-        Write-Host "It will run 'winget upgrade --all' at every user logon."
-
-    } catch {
-        Write-Host "Failed to register scheduled task '$TaskName'. Error: $_" -ForegroundColor Red
-    }
-    Write-Host ""
-}
-
 
 # --- 2. Upgrading all existing packages ---
 Write-Host "--- 1. Upgrading all existing packages (using Winget) ---" -ForegroundColor Cyan
@@ -466,10 +419,6 @@ Apply-SystemOptimizations
 # --- 6. Optional Local Installations ---
 Write-Host "--- 5. Optional Local Package Installations ---" -ForegroundColor Cyan
 Install-LocalPackage -AppName "NVIDIA App" -DialogTitle "Select NVIDIA App Installer (Optional - Click Cancel to skip)" -SilentArguments "-s"
-
-# --- 7. Register Auto-Upgrade Task ---
-Write-Host "--- 6. Registering Scheduled Task ---" -ForegroundColor Cyan
-Register-WingetAutoUpgradeTask
 
 Write-Host "--- All package installations are complete. ---" -ForegroundColor Cyan
 
