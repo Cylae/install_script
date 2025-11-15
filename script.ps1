@@ -55,6 +55,11 @@ Function Ensure-ModuleIsInstalled {
         Write-Host "Failed to install module '$ModuleName'. Error: $_" -ForegroundColor Red
         return
     }
+}
+
+Function Select-Applications {
+    # Ensure WinGet client module is installed
+    Ensure-ModuleIsInstalled
 
     # Import the module
     try {
