@@ -41,9 +41,6 @@ $TEMP_DIR = $env:TEMP
 $LOG_DIR = if (Test-Path $DESKTOP_DIR) { $DESKTOP_DIR } else { $TEMP_DIR }
 $LOG_FILE = Join-Path $LOG_DIR "log-$($START_TIME.ToString('yyyy-MM-dd_HH-mm-ss')).log"
 
-# Chrome download URL
-$CHROME_URL = "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi"
-
 # =====================================================================================================================
 # Utility Functions
 # =====================================================================================================================
@@ -81,6 +78,14 @@ function Initialize-Script {
     $osVersion = (Get-CimInstance -ClassName Win32_OperatingSystem).Version
     if ($osVersion -notmatch "^10\.0\.(22|23|24|25|26)\d{3}$") {
         Write-Status -Message "This script is optimized for Windows 11. Some features may not work as expected on other versions." -Type Warning
+    }
+
+    # Verify STA mode for GUI
+    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
+        Write-Status -Message "This script requires Single-Threaded Apartment (STA) mode to display the GUI. Restarting in STA mode..." -Type Warning
+        Start-Sleep -Seconds 3
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File $PSCommandPath
+        exit
     }
 }
 
@@ -156,65 +161,6 @@ function Ensure-ModuleIsInstalled {
     }
 }
 
-function Download-File {
-    <#
-    .SYNOPSIS
-        Downloads a file from a URL.
-    #>
-    param(
-        [string]$Url,
-        [string]$OutputPath
-    )
-
-    Write-Status -Message "Downloading file from '$Url'..." -Type Info
-
-    try {
-        $ProgressPreference = "Continue"
-        Invoke-WebRequest -Uri $Url -OutFile $OutputPath -UseBasicParsing -ErrorAction Stop
-        $ProgressPreference = "SilentlyContinue"
-
-        if (Test-Path $OutputPath) {
-            Write-Status -Message "File downloaded successfully to '$OutputPath'." -Type Success
-            return $true
-        }
-    }
-    catch {
-        Write-Status -Message "Failed to download file from '$Url'." -Type Error
-    }
-
-    return $false
-}
-
-function Install-Chrome {
-    <#
-    .SYNOPSIS
-        Downloads and installs Google Chrome.
-    #>
-    Write-Status -Message "Installing Google Chrome..." -Type Step
-    $chromeInstaller = Join-Path $TEMP_DIR "chrome-installer.msi"
-
-    if (Download-File -Url $CHROME_URL -OutputPath $chromeInstaller) {
-        try {
-            $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$chromeInstaller`" /qn /norestart ALLUSERS=1" -Wait -PassThru -ErrorAction Stop
-
-            if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                Write-Status -Message "Google Chrome installed successfully." -Type Success
-            }
-            else {
-                Write-Status -Message "Failed to install Google Chrome. Exit code: $($process.ExitCode)" -Type Error
-            }
-        }
-        catch {
-            Write-Status -Message "An error occurred while installing Google Chrome." -Type Error
-        }
-        finally {
-            if (Test-Path $chromeInstaller) {
-                Remove-Item $chromeInstaller -Force -ErrorAction SilentlyContinue
-            }
-        }
-    }
-}
-
 function Get-CuratedPackageList {
     <#
     .SYNOPSIS
@@ -222,6 +168,7 @@ function Get-CuratedPackageList {
     #>
     return @{
         "Essential System" = @(
+            "Google.Chrome",
             "Microsoft.WindowsTerminal",
             "Git.Git",
             "Microsoft.PowerToys",
@@ -447,58 +394,6 @@ function Install-WingetPackage {
     }
 }
 
-function Install-LocalPackage {
-    <#
-    .SYNOPSIS
-        Installs a local package from an installer file.
-    #>
-    Write-Status -Message "Select a local installer file to install." -Type Step
-
-    try {
-        Add-Type -AssemblyName System.Windows.Forms
-    }
-    catch {
-        Write-Status -Message "Failed to load Windows Forms assemblies. Please ensure that .NET Framework is installed." -Type Error
-        return
-    }
-
-    $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
-    $fileDialog.Title = "Select an Installer"
-    $fileDialog.Filter = "Installers (*.exe, *.msi)|*.exe;*.msi"
-    $result = $fileDialog.ShowDialog()
-
-    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        $installerPath = $fileDialog.FileName
-        Write-Status -Message "Installing local package from '$installerPath'..." -Type Info
-
-        try {
-            # Attempt to use silent installation arguments
-            $arguments = ""
-            if ($installerPath -like "*.msi") {
-                $arguments = "/i `"$installerPath`" /qn /norestart"
-                $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru -ErrorAction Stop
-            }
-            else {
-                $arguments = "/S /v/qn" # Common silent install switches for .exe installers
-                $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru -ErrorAction Stop
-            }
-
-            if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010) {
-                Write-Status -Message "Local package installed successfully." -Type Success
-            }
-            else {
-                Write-Status -Message "Failed to install local package. Exit code: $($process.ExitCode)" -Type Error
-            }
-        }
-        catch {
-            Write-Status -Message "An error occurred while installing the local package. You may need to install it manually." -Type Error
-        }
-    }
-    else {
-        Write-Status -Message "No installer selected. Skipping local package installation." -Type Info
-    }
-}
-
 function Optimize-System {
     <#
     .SYNOPSIS
@@ -715,12 +610,8 @@ try {
     Write-Status -Message "PHASE 1: System Checks and Prerequisites" -Type Step
     Ensure-ModuleIsInstalled
 
-    # Phase 2: Core Software Installation
-    Write-Status -Message "PHASE 2: Core Software Installation" -Type Step
-    Install-Chrome
-
-    # Phase 3: Application Installation
-    Write-Status -Message "PHASE 3: Application Installation" -Type Step
+    # Phase 2: Application Installation
+    Write-Status -Message "PHASE 2: Application Installation" -Type Step
     $selectedPackages = Select-Applications
     if ($selectedPackages) {
         foreach ($package in $selectedPackages) {
@@ -731,12 +622,8 @@ try {
         Write-Status -Message "No applications selected. Skipping installation." -Type Info
     }
 
-    # Phase 4: Local Application Installation
-    Write-Status -Message "PHASE 4: Local Application Installation" -Type Step
-    Install-LocalPackage
-
-    # Phase 5: System Optimization & Hardening
-    Write-Status -Message "PHASE 5: System Optimization & Hardening" -Type Step
+    # Phase 3: System Optimization & Hardening
+    Write-Status -Message "PHASE 3: System Optimization & Hardening" -Type Step
     Optimize-System
     Enable-SecurityHardening
 
